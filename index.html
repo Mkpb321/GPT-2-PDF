@@ -3788,16 +3788,56 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
 
       const DEFAULT_DOCUMENT_TITLE = "PDF formatieren";
 
-      function pdfBaseNameFromFirstLine() {
-        const firstLine = input.value.replace(/\r\n?/g, "\n").split("\n", 1)[0].trim();
-        const cleaned = firstLine
-          .replace(/\s+/g, "_")
-          .replace(/[.<>:"/\\|?*\u0000-\u001F\u007F]/g, "");
-        return Array.from(cleaned).slice(0, 10).join("") || "Dokument";
+      function markdownTitleTextFromFirstLine(value) {
+        let line = String(value ?? "").trim();
+        if (!line) return "";
+
+        const isHeading = /^#{1,6}(?:\s+|$)/.test(line);
+        if (isHeading) {
+          line = line.replace(/^#{1,6}\s*/, "").replace(/\s+#+\s*$/, "");
+        }
+
+        line = line
+          .replace(/^(?:>\s*)+/, "")
+          .replace(/^(?:[-+*]|\d{1,9}[.)])\s+/, "")
+          .replace(/^\[[ xX]\]\s+/, "")
+          .replace(/^(?:`{3,}|~{3,})(?:[^\s`]*)?\s*/, "");
+
+        try {
+          const textRenderer = new marked.TextRenderer();
+          line = marked.parseInline(line, { renderer: textRenderer });
+        } catch {}
+
+        return line
+          .replace(/<[^>]*>/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
       }
 
-      function updatePdfTitle() {
-        document.title = input.value.trim() ? pdfBaseNameFromFirstLine() : DEFAULT_DOCUMENT_TITLE;
+      function pdfBaseNameFromFirstLine() {
+        const firstLine = input.value.replace(/\r\n?/g, "\n").split("\n", 1)[0];
+        const cleaned = markdownTitleTextFromFirstLine(firstLine)
+          .replace(/\s+/g, "_")
+          .replace(/[.<>:"/\\|?*\u0000-\u001F\u007F]/g, "");
+        return Array.from(cleaned).slice(0, 100).join("") || "Dokument";
+      }
+
+      function sanitizePdfBaseName(value) {
+        const cleaned = String(value ?? "")
+          .trim()
+          .replace(/\.pdf$/i, "")
+          .replace(/[<>:"/\\|?*\u0000-\u001F\u007F]/g, "")
+          .replace(/[. ]+$/g, "")
+          .trim();
+        return cleaned || "Dokument";
+      }
+
+      function askForPdfTitle() {
+        const suggestedName = pdfBaseNameFromFirstLine();
+        const enteredName = window.prompt("Wie soll die PDF-Datei heißen?", suggestedName);
+        if (enteredName === null) return false;
+        document.title = sanitizePdfBaseName(enteredName || suggestedName);
+        return true;
       }
 
       const ALLOWED_TAGS = new Set([
@@ -4351,10 +4391,9 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
       }
 
       applyPrintColumnCount();
-      updatePdfTitle();
+      document.title = DEFAULT_DOCUMENT_TITLE;
 
       function build({scroll=true}={}) {
-        updatePdfTitle();
         const source = sourceText(); renderVersion += 1;
         if (!source) {
           output.innerHTML = '<p class="empty-state">Die formatierte Ausgabe erscheint hier.</p>';
@@ -4422,7 +4461,10 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
           if (!await render({scroll:false})) return;
         }
         applyPrintColumnCount();
-        updatePdfTitle();
+        if (!askForPdfTitle()) {
+          status.textContent = "Drucken abgebrochen.";
+          return;
+        }
         window.print();
       }
 
@@ -4434,7 +4476,7 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
         tableWidthMemory.clear();
         input.value=""; richClipboard=null; lastRenderedSource=""; renderVersion += 1;
         output.innerHTML='<p class="empty-state">Die formatierte Ausgabe erscheint hier.</p>';
-        updatePdfTitle();
+        document.title = DEFAULT_DOCUMENT_TITLE;
         status.textContent=""; input.focus();
       });
 
@@ -4445,12 +4487,10 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
         if (!html || !plain || !(input.value==="" || all)) { richClipboard=null; return; }
         e.preventDefault(); input.value=plain.replace(/\r\n?/g,"\n");
         richClipboard={plain:input.value.trim(),html};
-        updatePdfTitle();
         status.textContent="ChatGPT-Inhalt eingefügt.";
         queueLiveRender({immediate:true});
       });
       input.addEventListener("input", () => {
-        updatePdfTitle();
         if (richClipboard && sourceText()!==richClipboard.plain.trim()) richClipboard=null;
         queueLiveRender();
       });
@@ -4466,7 +4506,6 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
       });
       window.addEventListener("beforeprint", () => {
         applyPrintColumnCount();
-        updatePdfTitle();
         const needsBuild = sourceText() && sourceText() !== lastRenderedSource;
         if (needsBuild && build({scroll:false})) {
           try { MathJax.typeset?.([output]); } catch {}
