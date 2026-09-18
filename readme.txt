@@ -1,0 +1,1 @@
+Speicher für pdf>gpt den man sharen kann. Oder orgendwie für iphone optimieren UND es soll keine mindistbreite der tabellenspalten beim verschieben geben
