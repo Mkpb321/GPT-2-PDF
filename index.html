@@ -57,7 +57,8 @@
       margin-top: 8px;
     }
 
-    .print-columns-setting {
+    .print-columns-setting,
+    .print-font-setting {
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -75,7 +76,18 @@
       font: 13px Arial, Helvetica, sans-serif;
     }
 
+    #print-font-family {
+      max-width: 170px;
+      padding: 6px 7px;
+      border: 1px solid #aaa;
+      border-radius: 5px;
+      background: #fff;
+      color: #000;
+      font: 13px Arial, Helvetica, sans-serif;
+    }
+
     #print-column-count:focus-visible,
+    #print-font-family:focus-visible,
     textarea:focus-visible,
     button:focus-visible {
       outline: 2px solid #000;
@@ -114,7 +126,7 @@
       border: 1px solid #bbb;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
       overflow-wrap: break-word;
-      font-family: Arial, Helvetica, sans-serif;
+      font-family: var(--document-font-family, Arial, Helvetica, sans-serif);
       font-size: 9.5pt;
       line-height: 1.28;
       font-kerning: none;
@@ -471,7 +483,7 @@
         padding: 0 !important;
         border: 0 !important;
         box-shadow: none !important;
-        font-family: Arial, Helvetica, sans-serif !important;
+        font-family: var(--document-font-family, Arial, Helvetica, sans-serif) !important;
         font-size: 9.5pt;
         line-height: 1.28;
         font-kerning: none !important;
@@ -623,6 +635,19 @@
       <label class="print-columns-setting" for="print-column-count">
         Spalten
         <input id="print-column-count" type="number" min="1" step="1" value="1" inputmode="numeric">
+      </label>
+      <label class="print-font-setting" for="print-font-family">
+        Schriftart
+        <select id="print-font-family">
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Verdana">Verdana</option>
+          <option value="Tahoma">Tahoma</option>
+          <option value="Trebuchet MS">Trebuchet MS</option>
+          <option value="Calibri">Calibri</option>
+          <option value="Courier New">Courier New</option>
+        </select>
       </label>
       <button id="clear-button" type="button">Leeren</button>
       <span id="status" role="status" aria-live="polite"></span>
@@ -3777,7 +3802,20 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
       const printButton = document.getElementById("print-button");
       const clearButton = document.getElementById("clear-button");
       const printColumnCount = document.getElementById("print-column-count");
+      const printFontFamily = document.getElementById("print-font-family");
       const status = document.getElementById("status");
+
+      const FONT_STORAGE_KEY = "chatgpt-pdf-font-family";
+      const FONT_FAMILIES = Object.freeze({
+        "Arial": "Arial, Helvetica, sans-serif",
+        "Times New Roman": '"Times New Roman", Times, serif',
+        "Georgia": "Georgia, serif",
+        "Verdana": "Verdana, Geneva, sans-serif",
+        "Tahoma": "Tahoma, Geneva, sans-serif",
+        "Trebuchet MS": '"Trebuchet MS", Helvetica, sans-serif',
+        "Calibri": "Calibri, Carlito, Arial, sans-serif",
+        "Courier New": '"Courier New", Courier, monospace'
+      });
 
       let lastRenderedSource = "";
       let richClipboard = null;
@@ -4390,7 +4428,35 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
         }
       }
 
+      function applyFontFamily({announce=false, save=false}={}) {
+        const fontName = Object.prototype.hasOwnProperty.call(FONT_FAMILIES, printFontFamily.value)
+          ? printFontFamily.value : "Arial";
+        printFontFamily.value = fontName;
+        output.style.setProperty("--document-font-family", FONT_FAMILIES[fontName]);
+        if (save) {
+          try {
+            window.localStorage.setItem(FONT_STORAGE_KEY, fontName);
+          } catch (error) {
+            console.warn("Schriftart konnte nicht gespeichert werden:", error);
+          }
+        }
+        if (announce) status.textContent = `Schriftart: ${fontName}.`;
+      }
+
+      function restoreFontFamily() {
+        try {
+          const savedFont = window.localStorage.getItem(FONT_STORAGE_KEY);
+          if (Object.prototype.hasOwnProperty.call(FONT_FAMILIES, savedFont)) {
+            printFontFamily.value = savedFont;
+          }
+        } catch (error) {
+          console.warn("Gespeicherte Schriftart konnte nicht gelesen werden:", error);
+        }
+        applyFontFamily();
+      }
+
       applyPrintColumnCount();
+      restoreFontFamily();
       document.title = DEFAULT_DOCUMENT_TITLE;
 
       function build({scroll=true}={}) {
@@ -4471,6 +4537,7 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
       printButton.addEventListener("click", () => void printNow());
       printColumnCount.addEventListener("change", () => applyPrintColumnCount({announce:true}));
       printColumnCount.addEventListener("blur", () => applyPrintColumnCount());
+      printFontFamily.addEventListener("change", () => applyFontFamily({announce:true, save:true}));
       clearButton.addEventListener("click", () => {
         window.clearTimeout(liveRenderTimer); liveRenderTimer = 0;
         tableWidthMemory.clear();
@@ -4506,6 +4573,7 @@ Object.defineProperty(e,"__esModule",{value:!0}),e.mhchemParser=void 0;var r=fun
       });
       window.addEventListener("beforeprint", () => {
         applyPrintColumnCount();
+        applyFontFamily();
         const needsBuild = sourceText() && sourceText() !== lastRenderedSource;
         if (needsBuild && build({scroll:false})) {
           try { MathJax.typeset?.([output]); } catch {}
